@@ -9,7 +9,12 @@
 #include <sys/stat.h>
 #include <unistd.h>
 
+#include <span>
+#include <string_view>
+
 #include <wpi/raw_ostream.h>
+#include <wpi/SmallString.h>
+#include <wpi/StringExtras.h>
 
 UploadHelper::UploadHelper(UploadHelper&& oth)
     : m_filename{std::move(oth.m_filename)},
@@ -26,8 +31,8 @@ UploadHelper& UploadHelper::operator=(UploadHelper&& oth) {
   return *this;
 }
 
-bool UploadHelper::Open(wpi::StringRef filename, bool text,
-                        std::function<void(wpi::StringRef)> onFail) {
+bool UploadHelper::Open(std::string_view filename, bool text,
+                        std::function<void(std::string_view)> onFail) {
   m_text = text;
   m_hasEol = true;
   m_filename = filename;
@@ -45,19 +50,19 @@ bool UploadHelper::Open(wpi::StringRef filename, bool text,
   return m_fd >= 0;
 }
 
-void UploadHelper::Write(wpi::ArrayRef<uint8_t> contents) {
+void UploadHelper::Write(std::span<const uint8_t> contents) {
   if (m_fd < 0) return;
   // write contents
   wpi::raw_fd_ostream out(m_fd, false);
   if (m_text) {
-    wpi::StringRef str(reinterpret_cast<const char*>(contents.data()),
+    std::string_view str(reinterpret_cast<const char*>(contents.data()),
                        contents.size());
     // convert any Windows EOL to Unix
     for (;;) {
       size_t idx = str.find("\r\n");
-      if (idx == wpi::StringRef::npos) break;
-      out << str.slice(0, idx) << '\n';
-      str = str.slice(idx + 2, wpi::StringRef::npos);
+      if (idx == std::string_view::npos) break;
+      out << wpi::slice(str, 0, idx) << '\n';
+      str = wpi::slice(str, idx + 2, std::string_view::npos);
     }
     out << str;
     m_hasEol == str.empty() || str.back() == '\n';

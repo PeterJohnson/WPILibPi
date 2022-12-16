@@ -1,6 +1,20 @@
 IMG_VERSION?=$(shell git describe)
-DEPS_CFLAGS?=$(shell pkg-config --cflags cscore wpiutil) -std=c++17
-DEPS_LIBS?=$(shell pkg-config --libs --static cscore wpiutil)
+
+# For a desktop build with the allwpilib source tree:
+#ALLWPILIB=/home/peter/project/frc/allwpilib
+#DEPS_CFLAGS= \
+	-I${ALLWPILIB}/wpiutil/src/main/native/include \
+	-I${ALLWPILIB}/wpinet/src/main/native/include \
+	-I${ALLWPILIB}/cscore/src/main/native/include \
+	-I${ALLWPILIB}/wpiutil/src/main/native/thirdparty/llvm/include \
+	-I${ALLWPILIB}/wpiutil/src/main/native/thirdparty/sigslot/include \
+	-I${ALLWPILIB}/wpiutil/src/main/native/thirdparty/fmtlib/include \
+	-I${ALLWPILIB}/wpiutil/src/main/native/thirdparty/json/include \
+	-I${ALLWPILIB}/wpinet/src/main/native/thirdparty/libuv/include
+#DEPS_LIBS=-L${ALLWPILIB}/build-ninja/lib -lcscored -lwpinetd -lwpiutild
+
+DEPS_CFLAGS?=$(shell pkg-config --cflags cscore wpinet wpiutil)
+DEPS_LIBS?=$(shell pkg-config --libs --static cscore wpinet wpiutil)
 EXEC_HOME?=/home/pi
 FRC_JSON?=/boot/frc.json
 DHCPCD_CONF?=/boot/dhcpcd.conf
@@ -11,6 +25,7 @@ APP_UID?=1000
 APP_GID?=1000
 ROMI_JSON?=/boot/romi.json
 NODE_HOME?=/home/pi/.nvm/versions/node/v14.15.0/bin
+CXXFLAGS?=-std=c++20
 
 .PHONY: all clean install
 .SUFFIXES:

@@ -25,13 +25,13 @@ inputBase = os.path.basename(args.inputFile)
 funcName = "GetResource_" + re.sub(r"[^a-zA-Z0-9]", "_", inputBase)
 
 with open(args.outputFile, "wt") as f:
-    print("#include <stddef.h>\n#include <wpi/StringRef.h>\nextern \"C\" {\nstatic const unsigned char contents[] = { ", file=f, end='')
+    print("#include <stddef.h>\n#include <string_view>\nextern \"C\" {\nstatic const unsigned char contents[] = { ", file=f, end='')
     print(", ".join("0x%02x" % x for x in data), file=f, end='')
     print(" };", file=f)
     print("const unsigned char* {}{}(size_t* len) {{\n  *len = {};\n  return contents;\n}}\n}}".format(args.prefix, funcName, fileSize), file=f)
 
     if args.namespace:
         print("namespace {} {{".format(namespace), file=f)
-    print("wpi::StringRef {}() {{\n  return wpi::StringRef(reinterpret_cast<const char*>(contents), {});\n}}".format(funcName, fileSize), file=f)
+    print("std::string_view {}() {{\n  return std::string_view(reinterpret_cast<const char*>(contents), {});\n}}".format(funcName, fileSize), file=f)
     if args.namespace:
         print("}", file=f)

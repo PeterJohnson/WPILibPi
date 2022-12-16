@@ -7,12 +7,14 @@
 #include <unistd.h>
 #include <uv.h>
 
-#include <wpi/FileSystem.h>
+#include <fmt/format.h>
+#include <wpi/fs.h>
 #include <wpi/SmallVector.h>
-#include <wpi/UrlParser.h>
+#include <wpi/StringExtras.h>
 #include <wpi/raw_ostream.h>
-#include <wpi/raw_uv_ostream.h>
-#include <wpi/uv/Request.h>
+#include <wpinet/UrlParser.h>
+#include <wpinet/raw_uv_ostream.h>
+#include <wpinet/uv/Request.h>
 
 #include "WebSocketHandlers.h"
 
@@ -22,24 +24,24 @@ namespace uv = wpi::uv;
 
 // static resources
 namespace wpi {
-StringRef GetResource_bootstrap_4_1_min_js_gz();
-StringRef GetResource_coreui_2_1_min_css_gz();
-StringRef GetResource_coreui_2_1_min_js_gz();
-StringRef GetResource_feather_4_8_min_js_gz();
-StringRef GetResource_jquery_3_3_slim_min_js_gz();
-StringRef GetResource_popper_1_14_min_js_gz();
-StringRef GetResource_wpilib_128_png();
+std::string_view GetResource_bootstrap_4_1_min_js_gz();
+std::string_view GetResource_coreui_2_1_min_css_gz();
+std::string_view GetResource_coreui_2_1_min_js_gz();
+std::string_view GetResource_feather_4_8_min_js_gz();
+std::string_view GetResource_jquery_3_3_slim_min_js_gz();
+std::string_view GetResource_popper_1_14_min_js_gz();
+std::string_view GetResource_wpilib_128_png();
 }  // namespace wpi
-wpi::StringRef GetResource_frcvision_css();
-wpi::StringRef GetResource_frcvision_js();
-wpi::StringRef GetResource_index_html();
-wpi::StringRef GetResource_romi_ext_io_png();
+std::string_view GetResource_frcvision_css();
+std::string_view GetResource_frcvision_js();
+std::string_view GetResource_index_html();
+std::string_view GetResource_romi_ext_io_png();
 
 MyHttpConnection::MyHttpConnection(std::shared_ptr<wpi::uv::Stream> stream)
     : HttpServerConnection(stream), m_websocketHelper(m_request) {
   // Handle upgrade event
   m_websocketHelper.upgrade.connect([this] {
-    //wpi::errs() << "got websocket upgrade\n";
+    //fmt::print(stderr, "got websocket upgrade\n");
     // Disconnect HttpServerConnection header reader
     m_dataConn.disconnect();
     m_messageCompleteConn.disconnect();
@@ -53,15 +55,15 @@ MyHttpConnection::MyHttpConnection(std::shared_ptr<wpi::uv::Stream> stream)
 
     // Connect the websocket open event to our connected event.
     // Pass self to delay destruction until this callback happens
-    ws->open.connect_extended([self, s = ws.get()](auto conn, wpi::StringRef) {
-      wpi::errs() << "websocket connected\n";
+    ws->open.connect_extended([self, s = ws.get()](auto conn, std::string_view) {
+      fmt::print(stderr, "websocket connected\n");
       InitWs(*s);
       conn.disconnect();  // one-shot
     });
-    ws->text.connect([s = ws.get()](wpi::StringRef msg, bool) {
+    ws->text.connect([s = ws.get()](std::string_view msg, bool) {
       ProcessWsText(*s, msg);
     });
-    ws->binary.connect([s = ws.get()](wpi::ArrayRef<uint8_t> msg, bool) {
+    ws->binary.connect([s = ws.get()](std::span<const uint8_t> msg, bool) {
       ProcessWsBinary(*s, msg);
     });
   });
@@ -125,20 +127,27 @@ void Sendfile(uv::Loop& loop, uv_file out, uv_file in, int64_t inOffset,
   if (err >= 0) req->Keep();
 }
 
-void MyHttpConnection::SendFileResponse(int code, const wpi::Twine& codeText,
-                                        const wpi::Twine& contentType,
-                                        const wpi::Twine& filename,
-                                        const wpi::Twine& extraHeader) {
+void MyHttpConnection::SendFileResponse(int code, std::string_view codeText,
+                                        std::string_view contentType,
+                                        std::string_view filename,
+                                        std::string_view extraHeader) {
   // open file
-  int infd;
-  if (wpi::sys::fs::openFileForRead(filename, infd)) {
+  std::error_code ec;
+  auto infile = fs::OpenFileForRead(filename, ec);
+  if (ec) {
+    SendError(404);
+    return;
+  }
+  int infd = fs::FileToFd(infile, ec, fs::OF_None);
+  if (ec) {
+    fs::CloseFile(infile);
     SendError(404);
     return;
   }
 
   // get status (to get file size)
-  wpi::sys::fs::file_status status;
-  if (wpi::sys::fs::status(infd, status)) {
+  auto size = fs::file_size(filename, ec);
+  if (ec) {
     SendError(404);
     ::close(infd);
     return;
@@ -155,13 +164,13 @@ void MyHttpConnection::SendFileResponse(int code, const wpi::Twine& codeText,
 
   wpi::SmallVector<uv::Buffer, 4> toSend;
   wpi::raw_uv_ostream os{toSend, 4096};
-  BuildHeader(os, code, codeText, contentType, status.getSize(), extraHeader);
+  BuildHeader(os, code, codeText, contentType, size, extraHeader);
   SendData(os.bufs(), false);
 
   // close after write completes if we aren't keeping alive
   // since we're using sendfile, set socket to blocking
   m_stream.SetBlocking(true);
-  Sendfile(m_stream.GetLoopRef(), outfd, infd, 0, status.getSize(),
+  Sendfile(m_stream.GetLoopRef(), outfd, infd, 0, size,
            [ infd, closeAfter = !m_keepAlive, stream = &m_stream ] {
              ::close(infd);
              if (closeAfter)
@@ -172,7 +181,7 @@ void MyHttpConnection::SendFileResponse(int code, const wpi::Twine& codeText,
 }
 
 void MyHttpConnection::ProcessRequest() {
-  //wpi::errs() << "HTTP request: '" << m_request.GetUrl() << "'\n";
+  //fmt::print(stderr, "HTTP request: '{}'\n", m_request.GetUrl());
   wpi::UrlParser url{m_request.GetUrl(),
                      m_request.GetMethod() == wpi::HTTP_CONNECT};
   if (!url.IsValid()) {
@@ -181,50 +190,51 @@ void MyHttpConnection::ProcessRequest() {
     return;
   }
 
-  wpi::StringRef path;
+  std::string_view path;
   if (url.HasPath()) path = url.GetPath();
-  //wpi::errs() << "path: \"" << path << "\"\n";
+  //fmt::print(stderr, "path: \"{}\"\n", path);
 
-  wpi::StringRef query;
+  std::string_view query;
   if (url.HasQuery()) query = url.GetQuery();
-  //wpi::errs() << "query: \"" << query << "\"\n";
+  //fmt::print(stderr, "query: \"{}\"\n", query);
 
   const bool isGET = m_request.GetMethod() == wpi::HTTP_GET;
-  if (isGET && (path.equals("/") || path.equals("/index.html"))) {
+  if (isGET && (path == "/" || path == "/index.html")) {
     SendStaticResponse(200, "OK", "text/html", GetResource_index_html(), false);
-  } else if (isGET && path.equals("/frcvision.css")) {
+  } else if (isGET && path == "/frcvision.css") {
     SendStaticResponse(200, "OK", "text/css", GetResource_frcvision_css(),
                        false);
-  } else if (isGET && path.equals("/frcvision.js")) {
+  } else if (isGET && path == "/frcvision.js") {
     SendStaticResponse(200, "OK", "text/javascript", GetResource_frcvision_js(),
                        false);
-  } else if (isGET && path.equals("/bootstrap.min.js")) {
+  } else if (isGET && path == "/bootstrap.min.js") {
     SendStaticResponse(200, "OK", "text/javascript",
                        wpi::GetResource_bootstrap_4_1_min_js_gz(), true);
-  } else if (isGET && path.equals("/coreui.min.css")) {
+  } else if (isGET && path == "/coreui.min.css") {
     SendStaticResponse(200, "OK", "text/css",
                        wpi::GetResource_coreui_2_1_min_css_gz(), true);
-  } else if (isGET && path.equals("/coreui.min.js")) {
+  } else if (isGET && path == "/coreui.min.js") {
     SendStaticResponse(200, "OK", "text/javascript",
                        wpi::GetResource_coreui_2_1_min_js_gz(), true);
-  } else if (isGET && path.equals("/feather.min.js")) {
+  } else if (isGET && path == "/feather.min.js") {
     SendStaticResponse(200, "OK", "text/javascript",
                        wpi::GetResource_feather_4_8_min_js_gz(), true);
-  } else if (isGET && path.equals("/jquery-3.3.1.slim.min.js")) {
+  } else if (isGET && path == "/jquery-3.3.1.slim.min.js") {
     SendStaticResponse(200, "OK", "text/javascript",
                        wpi::GetResource_jquery_3_3_slim_min_js_gz(), true);
-  } else if (isGET && path.equals("/popper.min.js")) {
+  } else if (isGET && path == "/popper.min.js") {
     SendStaticResponse(200, "OK", "text/javascript",
                        wpi::GetResource_popper_1_14_min_js_gz(), true);
-  } else if (isGET && path.equals("/wpilib.png")) {
+  } else if (isGET && path == "/wpilib.png") {
     SendStaticResponse(200, "OK", "image/png",
                        wpi::GetResource_wpilib_128_png(), false);
-  } else if (isGET && path.equals("/romi_ext_io.png")) {
+  } else if (isGET && path == "/romi_ext_io.png") {
     SendStaticResponse(200, "OK", "image/png",
                        GetResource_romi_ext_io_png(), false);
-  } else if (isGET && path.startswith("/") && path.endswith(".zip") &&
-             !path.contains("..")) {
-    SendFileResponse(200, "OK", "application/zip", wpi::Twine(ZIPS_DIR) + path);
+  } else if (isGET && wpi::starts_with(path, '/') &&
+             wpi::ends_with(path, ".zip") && !wpi::contains(path, "..")) {
+    SendFileResponse(200, "OK", "application/zip",
+                     fmt::format("{}{}", ZIPS_DIR, path));
   } else {
     SendError(404, "Resource not found");
   }

@@ -5,15 +5,17 @@
 #ifndef RPICONFIGSERVER_WEBSOCKETHANDLERS_H_
 #define RPICONFIGSERVER_WEBSOCKETHANDLERS_H_
 
-#include <wpi/ArrayRef.h>
-#include <wpi/StringRef.h>
+#include <stdint.h>
+
+#include <span>
+#include <string_view>
 
 namespace wpi {
 class WebSocket;
 }  // namespace wpi
 
 void InitWs(wpi::WebSocket& ws);
-void ProcessWsText(wpi::WebSocket& ws, wpi::StringRef msg);
-void ProcessWsBinary(wpi::WebSocket& ws, wpi::ArrayRef<uint8_t> msg);
+void ProcessWsText(wpi::WebSocket& ws, std::string_view msg);
+void ProcessWsBinary(wpi::WebSocket& ws, std::span<const uint8_t> msg);
 
 #endif  // RPICONFIGSERVER_WEBSOCKETHANDLERS_H_

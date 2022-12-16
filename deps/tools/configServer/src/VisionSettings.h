@@ -7,9 +7,9 @@
 
 #include <functional>
 #include <memory>
+#include <string_view>
 
 #include <wpi/Signal.h>
-#include <wpi/StringRef.h>
 
 namespace wpi {
 class json;
@@ -23,7 +23,7 @@ class VisionSettings {
   VisionSettings(const VisionSettings&) = delete;
   VisionSettings& operator=(const VisionSettings&) = delete;
 
-  void Set(const wpi::json& data, std::function<void(wpi::StringRef)> onFail);
+  void Set(const wpi::json& data, std::function<void(std::string_view)> onFail);
 
   void UpdateStatus();
 

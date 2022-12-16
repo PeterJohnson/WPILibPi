@@ -8,10 +8,9 @@
 #include <functional>
 #include <memory>
 #include <string>
+#include <string_view>
 
-#include <wpi/ArrayRef.h>
 #include <wpi/Signal.h>
-#include <wpi/StringRef.h>
 
 namespace wpi {
 class json;
@@ -27,10 +26,11 @@ class Application {
   Application(const Application&) = delete;
   Application& operator=(const Application&) = delete;
 
-  void Set(wpi::StringRef appType, std::function<void(wpi::StringRef)> onFail);
+  void Set(std::string_view appType,
+           std::function<void(std::string_view)> onFail);
 
-  void FinishUpload(wpi::StringRef appType, UploadHelper& helper,
-                    std::function<void(wpi::StringRef)> onFail);
+  void FinishUpload(std::string_view appType, UploadHelper& helper,
+                    std::function<void(std::string_view)> onFail);
 
   void UpdateStatus();
 

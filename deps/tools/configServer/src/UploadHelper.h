@@ -8,10 +8,9 @@
 #include <stdint.h>
 
 #include <functional>
-
-#include <wpi/ArrayRef.h>
-#include <wpi/SmallString.h>
-#include <wpi/StringRef.h>
+#include <span>
+#include <string>
+#include <string_view>
 
 class UploadHelper {
  public:
@@ -29,13 +28,13 @@ class UploadHelper {
   const char* GetFilename() { return m_filename.c_str(); }
   int GetFD() const { return m_fd; }
 
-  bool Open(wpi::StringRef filename, bool text,
-            std::function<void(wpi::StringRef)> onFail);
-  void Write(wpi::ArrayRef<uint8_t> contents);
+  bool Open(std::string_view filename, bool text,
+            std::function<void(std::string_view)> onFail);
+  void Write(std::span<const uint8_t> contents);
   void Close();
 
  private:
-  wpi::SmallString<128> m_filename;
+  std::string m_filename;
   int m_fd = -1;
   bool m_text;
   bool m_hasEol;

@@ -4,9 +4,11 @@
 
 #include "SystemStatus.h"
 
+#include <string_view>
+
 #include <wpi/SmallString.h>
 #include <wpi/SmallVector.h>
-#include <wpi/StringRef.h>
+#include <wpi/StringExtras.h>
 #include <wpi/json.h>
 #include <wpi/raw_istream.h>
 #include <wpi/raw_ostream.h>
@@ -105,14 +107,14 @@ bool SystemStatus::GetWritable() {
   if (ec) return false;
   wpi::SmallString<256> lineBuf;
   while (!is.has_error()) {
-    wpi::StringRef line = is.getline(lineBuf, 256).trim();
+    std::string_view line = wpi::trim(is.getline(lineBuf, 256));
     if (line.empty()) break;
 
-    wpi::SmallVector<wpi::StringRef, 8> strs;
-    line.split(strs, ' ', -1, false);
+    wpi::SmallVector<std::string_view, 8> strs;
+    wpi::split(line, strs, ' ', -1, false);
     if (strs.size() < 4) continue;
 
-    if (strs[1] == "/") return strs[3].contains("rw");
+    if (strs[1] == "/") return wpi::contains(strs[3], "rw");
   }
   return false;
 }
@@ -123,20 +125,19 @@ void SystemStatus::UpdateMemory() {
   if (ec) return;
   wpi::SmallString<256> lineBuf;
   while (!is.has_error()) {
-    wpi::StringRef line = is.getline(lineBuf, 256).trim();
+    std::string_view line = wpi::trim(is.getline(lineBuf, 256));
     if (line.empty()) break;
 
-    wpi::StringRef name, amtStr;
-    std::tie(name, amtStr) = line.split(':');
+    std::string_view name, amtStr;
+    std::tie(name, amtStr) = wpi::split(line, ':');
 
-    uint64_t amt;
-    amtStr = amtStr.trim();
-    if (amtStr.consumeInteger(10, amt)) continue;
-
-    if (name == "MemFree") {
-      m_memoryFree.Add(amt);
-    } else if (name == "MemAvailable") {
-      m_memoryAvail.Add(amt);
+    amtStr = wpi::trim(amtStr);
+    if (auto val = wpi::consume_integer<uint64_t>(&amtStr, 10)) {
+      if (name == "MemFree") {
+        m_memoryFree.Add(*val);
+      } else if (name == "MemAvailable") {
+        m_memoryAvail.Add(*val);
+      }
     }
   }
 }
@@ -147,31 +148,49 @@ void SystemStatus::UpdateCpu() {
   if (ec) return;
   wpi::SmallString<256> lineBuf;
   while (!is.has_error()) {
-    wpi::StringRef line = is.getline(lineBuf, 256).trim();
+    std::string_view line = wpi::trim(is.getline(lineBuf, 256));
     if (line.empty()) break;
 
-    wpi::StringRef name, amtStr;
-    std::tie(name, amtStr) = line.split(' ');
+    std::string_view name, amtStr;
+    std::tie(name, amtStr) = wpi::split(line, ' ');
     if (name == "cpu") {
       CpuData data;
 
       // individual values we care about
-      amtStr = amtStr.ltrim();
-      if (amtStr.consumeInteger(10, data.user)) break;
-      amtStr = amtStr.ltrim();
-      if (amtStr.consumeInteger(10, data.nice)) break;
-      amtStr = amtStr.ltrim();
-      if (amtStr.consumeInteger(10, data.system)) break;
-      amtStr = amtStr.ltrim();
-      if (amtStr.consumeInteger(10, data.idle)) break;
+      amtStr = wpi::ltrim(amtStr);
+      if (auto val = wpi::consume_integer<uint64_t>(&amtStr, 10)) {
+        data.user = *val;
+      } else {
+        break;
+      }
+      amtStr = wpi::ltrim(amtStr);
+      if (auto val = wpi::consume_integer<uint64_t>(&amtStr, 10)) {
+        data.nice = *val;
+      } else {
+        break;
+      }
+      amtStr = wpi::ltrim(amtStr);
+      if (auto val = wpi::consume_integer<uint64_t>(&amtStr, 10)) {
+        data.system = *val;
+      } else {
+        break;
+      }
+      amtStr = wpi::ltrim(amtStr);
+      if (auto val = wpi::consume_integer<uint64_t>(&amtStr, 10)) {
+        data.idle = *val;
+      } else {
+        break;
+      }
 
       // compute total
       data.total = data.user + data.nice + data.system + data.idle;
       for (;;) {
-        uint64_t amt;
-        amtStr = amtStr.ltrim();
-        if (amtStr.consumeInteger(10, amt)) break;
-        data.total += amt;
+        amtStr = wpi::ltrim(amtStr);
+        if (auto val = wpi::consume_integer<uint64_t>(&amtStr, 10)) {
+          data.total += *val;
+        } else {
+          break;
+        }
       }
 
       m_cpu.Add(data);
@@ -189,27 +208,27 @@ void SystemStatus::UpdateNetwork() {
 
   wpi::SmallString<256> lineBuf;
   while (!is.has_error()) {
-    wpi::StringRef line = is.getline(lineBuf, 256).trim();
+    std::string_view line = wpi::trim(is.getline(lineBuf, 256));
     if (line.empty()) break;
 
-    wpi::StringRef name, amtStr;
-    std::tie(name, amtStr) = line.split(':');
-    name = name.trim();
+    std::string_view name, amtStr;
+    std::tie(name, amtStr) = wpi::split(line, ':');
+    name = wpi::trim(name);
     if (name.empty() || name == "lo") continue;
 
-    wpi::SmallVector<wpi::StringRef, 20> amtStrs;
-    amtStr.split(amtStrs, ' ', -1, false);
+    wpi::SmallVector<std::string_view, 20> amtStrs;
+    wpi::split(amtStr, amtStrs, ' ', -1, false);
     if (amtStrs.size() < 16) continue;
 
-    uint64_t amt;
-
     // receive bytes
-    if (amtStrs[0].getAsInteger(10, amt)) continue;
-    data.recvBytes += amt;
+    if (auto val = wpi::parse_integer<uint64_t>(amtStrs[0], 10)) {
+      data.recvBytes += *val;
+    }
 
     // transmit bytes
-    if (amtStrs[8].getAsInteger(10, amt)) continue;
-    data.xmitBytes += amt;
+    if (auto val = wpi::parse_integer<uint64_t>(amtStrs[8], 10)) {
+      data.xmitBytes += *val;
+    }
   }
 
   m_network.Add(data);
@@ -221,11 +240,11 @@ void SystemStatus::UpdateTemp() {
   if (ec) return;
   wpi::SmallString<256> lineBuf;
   while (!is.has_error()) {
-    wpi::StringRef line = is.getline(lineBuf, 256).trim();
+    std::string_view line = wpi::trim(is.getline(lineBuf, 256));
     if (line.empty()) break;
 
-    uint64_t amt;
-    if (line.getAsInteger(10, amt)) continue;
-    m_temp.Add(amt);
+    if (auto amt = wpi::parse_integer<uint64_t>(line, 10)) {
+      m_temp.Add(*amt);
+    }
   }
 }

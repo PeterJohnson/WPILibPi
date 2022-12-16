@@ -4,7 +4,8 @@
 
 #include "VisionSettings.h"
 
-#include <wpi/FileSystem.h>
+#include <fmt/format.h>
+#include <wpi/fs.h>
 #include <wpi/json.h>
 #include <wpi/raw_istream.h>
 #include <wpi/raw_ostream.h>
@@ -17,11 +18,11 @@ std::shared_ptr<VisionSettings> VisionSettings::GetInstance() {
 }
 
 void VisionSettings::Set(const wpi::json& data,
-                         std::function<void(wpi::StringRef)> onFail) {
+                         std::function<void(std::string_view)> onFail) {
   {
     // write file
     std::error_code ec;
-    wpi::raw_fd_ostream os(FRC_JSON, ec, wpi::sys::fs::F_Text);
+    wpi::raw_fd_ostream os(FRC_JSON, ec, fs::F_Text);
     if (ec) {
       onFail("could not write " FRC_JSON);
       return;
@@ -42,7 +43,7 @@ wpi::json VisionSettings::GetStatusJson() {
   std::error_code ec;
   wpi::raw_fd_istream is(FRC_JSON, ec);
   if (ec) {
-    wpi::errs() << "could not read " FRC_JSON "\n";
+    fmt::print(stderr, "could not read {}\n", FRC_JSON);
     return wpi::json();
   }
 
@@ -51,7 +52,7 @@ wpi::json VisionSettings::GetStatusJson() {
                    {"settings", wpi::json::parse(is)}};
     return j;
   } catch (wpi::json::exception& e) {
-    wpi::errs() << "could not parse " FRC_JSON "\n";
+    fmt::print(stderr, "could not parse {}\n", FRC_JSON);
     return wpi::json();
   }
 }

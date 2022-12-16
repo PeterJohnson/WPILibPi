@@ -11,18 +11,21 @@
 #include <unistd.h>
 
 #include <cstring>
+#include <string_view>
 
 #include <cscore.h>
-#include <wpi/SmallString.h>
-#include <wpi/StringRef.h>
+#include <fmt/format.h>
+#include <wpi/fmt/raw_ostream.h>
 #include <wpi/json.h>
 #include <wpi/raw_ostream.h>
-#include <wpi/uv/Buffer.h>
-#include <wpi/uv/FsEvent.h>
-#include <wpi/uv/Pipe.h>
-#include <wpi/uv/Process.h>
-#include <wpi/uv/Timer.h>
-#include <wpi/uv/Work.h>
+#include <wpi/SmallString.h>
+#include <wpi/StringExtras.h>
+#include <wpinet/uv/Buffer.h>
+#include <wpinet/uv/FsEvent.h>
+#include <wpinet/uv/Pipe.h>
+#include <wpinet/uv/Process.h>
+#include <wpinet/uv/Timer.h>
+#include <wpinet/uv/Work.h>
 
 namespace uv = wpi::uv;
 
@@ -42,7 +45,7 @@ void VisionStatus::SetLoop(std::shared_ptr<wpi::uv::Loop> loop) {
 
   auto devEvents = wpi::uv::FsEvent::Create(m_loop);
   devEvents->fsEvent.connect([refreshTimer](const char* fn, int flags) {
-    if (wpi::StringRef(fn).startswith("video"))
+    if (wpi::starts_with(fn, "video"))
       refreshTimer->Start(wpi::uv::Timer::Time(200));
   });
   devEvents->Start("/dev");
@@ -69,7 +72,7 @@ void VisionStatus::UpdateCameraList() {
     for (const auto& mode : caminfo.modes) {
       wpi::json jmode;
 
-      wpi::StringRef pixelFormatStr;
+      std::string_view pixelFormatStr;
       switch (mode.pixelFormat) {
         case cs::VideoMode::kMJPEG:
           pixelFormatStr = "mjpeg";
@@ -124,12 +127,12 @@ void VisionStatus::RefreshCameraList() {
 }
 
 void VisionStatus::RunSvc(const char* cmd,
-                          std::function<void(wpi::StringRef)> onFail) {
+                          std::function<void(std::string_view)> onFail) {
   struct SvcWorkReq : public uv::WorkReq {
-    SvcWorkReq(const char* cmd_, std::function<void(wpi::StringRef)> onFail_)
+    SvcWorkReq(const char* cmd_, std::function<void(std::string_view)> onFail_)
         : cmd(cmd_), onFail(onFail_) {}
     const char* cmd;
-    std::function<void(wpi::StringRef)> onFail;
+    std::function<void(std::string_view)> onFail;
     wpi::SmallString<128> err;
   };
 
@@ -139,14 +142,14 @@ void VisionStatus::RunSvc(const char* cmd,
     if (fd == -1) {
       wpi::raw_svector_ostream os(r->err);
       if (errno == ENXIO)
-        os << "unable to control service: supervise not running";
+        fmt::print(os, "unable to control service: supervise not running");
       else
-        os << "unable to control service: " << std::strerror(errno);
+        fmt::print(os, "unable to control service: {}", std::strerror(errno));
     } else {
       fcntl(fd, F_SETFL, fcntl(fd, F_GETFL, 0) & ~O_NONBLOCK);
       if (write(fd, r->cmd, std::strlen(r->cmd)) == -1) {
         wpi::raw_svector_ostream os(r->err);
-        os << "error writing command: " << std::strerror(errno);
+        fmt::print(os, "error writing command: {}", std::strerror(errno));
       }
       close(fd);
     }
@@ -158,22 +161,22 @@ void VisionStatus::RunSvc(const char* cmd,
   uv::QueueWork(m_loop, workReq);
 }
 
-void VisionStatus::Up(std::function<void(wpi::StringRef)> onFail) {
+void VisionStatus::Up(std::function<void(std::string_view)> onFail) {
   RunSvc("u", onFail);
   UpdateStatus();
 }
 
-void VisionStatus::Down(std::function<void(wpi::StringRef)> onFail) {
+void VisionStatus::Down(std::function<void(std::string_view)> onFail) {
   RunSvc("d", onFail);
   UpdateStatus();
 }
 
-void VisionStatus::Terminate(std::function<void(wpi::StringRef)> onFail) {
+void VisionStatus::Terminate(std::function<void(std::string_view)> onFail) {
   RunSvc("t", onFail);
   UpdateStatus();
 }
 
-void VisionStatus::Kill(std::function<void(wpi::StringRef)> onFail) {
+void VisionStatus::Kill(std::function<void(std::string_view)> onFail) {
   RunSvc("k", onFail);
   UpdateStatus();
 }
@@ -193,9 +196,9 @@ void VisionStatus::UpdateStatus() {
     int fd = open(SERVICE "/supervise/ok", O_WRONLY | O_NDELAY);
     if (fd == -1) {
       if (errno == ENXIO)
-        os << "supervise not running";
+        fmt::print(os, "supervise not running");
       else
-        os << "unable to open supervise/ok: " << std::strerror(errno);
+        fmt::print(os, "unable to open supervise/ok: {}", std::strerror(errno));
       return;
     }
     close(fd);
@@ -203,18 +206,19 @@ void VisionStatus::UpdateStatus() {
     // read the status data
     fd = open(SERVICE "/supervise/status", O_RDONLY | O_NDELAY);
     if (fd == -1) {
-      os << "unable to open supervise/status: " << std::strerror(errno);
+      fmt::print(os, "unable to open supervise/status: {}",
+                 std::strerror(errno));
       return;
     }
     uint8_t status[18];
     int nr = read(fd, status, sizeof status);
     close(fd);
     if (nr < static_cast<int>(sizeof status)) {
-      os << "unable to read supervise/status: ";
+      fmt::print(os, "unable to read supervise/status: ");
       if (nr == -1)
-        os << std::strerror(errno);
+        fmt::print(os, std::strerror(errno));
       else
-        os << "bad format";
+        fmt::print(os, "bad format");
       return;
     }
 
@@ -244,13 +248,13 @@ void VisionStatus::UpdateStatus() {
 
     // convert to status string
     if (pid)
-      os << "up (pid " << pid << ") ";
+      fmt::print(os, "up (pid {}) ", pid);
     else
-      os << "down ";
-    os << when << " seconds";
-    if (pid && paused) os << ", paused";
-    if (!pid && want == 'u') os << ", want up";
-    if (pid && want == 'd') os << ", want down";
+      fmt::print(os, "down ");
+    fmt::print(os, "{} seconds", when);
+    if (pid && paused) fmt::print(os, ", paused");
+    if (!pid && want == 'u') fmt::print(os, ", want up");
+    if (pid && want == 'd') fmt::print(os, ", want down");
 
     if (pid) r->enabled = true;
   });
@@ -267,6 +271,6 @@ void VisionStatus::UpdateStatus() {
 
 void VisionStatus::ConsoleLog(uv::Buffer& buf, size_t len) {
   wpi::json j = {{"type", "visionLog"},
-                 {"data", wpi::StringRef(buf.base, len)}};
+                 {"data", std::string_view(buf.base, len)}};
   log(j);
 }

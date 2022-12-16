@@ -8,15 +8,19 @@
 
 #include <cstring>
 #include <memory>
+#include <span>
+#include <string_view>
 
-#include <wpi/SmallVector.h>
-#include <wpi/WebSocket.h>
+#include <fmt/format.h>
 #include <wpi/json.h>
 #include <wpi/raw_ostream.h>
-#include <wpi/raw_uv_ostream.h>
-#include <wpi/uv/Loop.h>
-#include <wpi/uv/Pipe.h>
-#include <wpi/uv/Process.h>
+#include <wpi/SmallVector.h>
+#include <wpi/StringExtras.h>
+#include <wpinet/raw_uv_ostream.h>
+#include <wpinet/uv/Loop.h>
+#include <wpinet/uv/Pipe.h>
+#include <wpinet/uv/Process.h>
+#include <wpinet/WebSocket.h>
 
 #include "Application.h"
 #include "NetworkSettings.h"
@@ -53,14 +57,14 @@ static void SendWsText(wpi::WebSocket& ws, const wpi::json& j) {
   wpi::SmallVector<uv::Buffer, 4> toSend;
   wpi::raw_uv_ostream os{toSend, 4096};
   os << j;
-  ws.SendText(toSend, [](wpi::MutableArrayRef<uv::Buffer> bufs, uv::Error) {
+  ws.SendText(toSend, [](std::span<uv::Buffer> bufs, uv::Error) {
     for (auto&& buf : bufs) buf.Deallocate();
   });
 }
 
 template <typename OnSuccessFunc, typename OnFailFunc, typename... Args>
 static void RunProcess(wpi::WebSocket& ws, OnSuccessFunc success,
-                       OnFailFunc fail, const wpi::Twine& file,
+                       OnFailFunc fail, std::string_view file,
                        const Args&... args) {
   uv::Loop& loop = ws.GetStream().GetLoopRef();
 
@@ -176,15 +180,15 @@ void InitWs(wpi::WebSocket& ws) {
       appSettings->status.connect_connection(appSettingsFunc);
 }
 
-void ProcessWsText(wpi::WebSocket& ws, wpi::StringRef msg) {
-  wpi::errs() << "ws: '" << msg << "'\n";
+void ProcessWsText(wpi::WebSocket& ws, std::string_view msg) {
+  fmt::print(stderr, "ws: '{}'\n", msg);
 
   // parse
   wpi::json j;
   try {
     j = wpi::json::parse(msg, nullptr, false);
   } catch (const wpi::json::parse_error& e) {
-    wpi::errs() << "parse error at byte " << e.byte << ": " << e.what() << '\n';
+    fmt::print(stderr, "parse error at byte {}: {}\n", e.byte, e.what());
     return;
   }
 
@@ -199,17 +203,17 @@ void ProcessWsText(wpi::WebSocket& ws, wpi::StringRef msg) {
   try {
     type = j.at("type").get<std::string>();
   } catch (const wpi::json::exception& e) {
-    wpi::errs() << "could not read type: " << e.what() << '\n';
+    fmt::print(stderr, "could not read type: {}\n", e.what());
     return;
   }
 
-  wpi::outs() << "type: " << type << '\n';
+  fmt::print("type: {}\n", type);
 
   //uv::Loop& loop = ws.GetStream().GetLoopRef();
 
-  wpi::StringRef t(type);
-  if (t.startswith("system")) {
-    wpi::StringRef subType = t.substr(6);
+  std::string_view t(type);
+  if (wpi::starts_with(t, "system")) {
+    std::string_view subType = wpi::substr(t, 6);
 
     auto readOnlyFunc = [](wpi::WebSocket& s) {
       SendWsText(s, {{"type", "systemReadOnly"}});
@@ -230,10 +234,10 @@ void ProcessWsText(wpi::WebSocket& ws, wpi::StringRef msg) {
           ws, writableFunc, readOnlyFunc, "/bin/sh", "/bin/sh", "-c",
           "/bin/mount -o remount,rw / && /bin/mount -o remount,rw /boot");
     }
-  } else if (t.startswith("vision")) {
-    wpi::StringRef subType = t.substr(6);
+  } else if (wpi::starts_with(t, "vision")) {
+    std::string_view subType = wpi::substr(t, 6);
 
-    auto statusFunc = [s = ws.shared_from_this()](wpi::StringRef msg) {
+    auto statusFunc = [s = ws.shared_from_this()](std::string_view msg) {
       SendWsText(*s, {{"type", "status"}, {"message", msg}});
     };
 
@@ -250,22 +254,22 @@ void ProcessWsText(wpi::WebSocket& ws, wpi::StringRef msg) {
         ws.GetData<WebSocketData>()->visionLogEnabled =
             j.at("value").get<bool>();
       } catch (const wpi::json::exception& e) {
-        wpi::errs() << "could not read visionLogEnabled value: " << e.what()
-                    << '\n';
+        fmt::print(stderr, "could not read visionLogEnabled value: {}\n",
+                   e.what());
         return;
       }
     } else if (subType == "Save") {
       try {
         VisionSettings::GetInstance()->Set(j.at("settings"), statusFunc);
       } catch (const wpi::json::exception& e) {
-        wpi::errs() << "could not read visionSave value: " << e.what() << '\n';
+        fmt::print(stderr, "could not read visionSave value: {}\n", e.what());
         return;
       }
     }
-  } else if (t.startswith("romi") && romi) {
-    wpi::StringRef subType = t.substr(4);
+  } else if (wpi::starts_with(t,"romi") && romi) {
+    std::string_view subType = wpi::substr(t, 4);
 
-    auto statusFunc = [s = ws.shared_from_this()](wpi::StringRef msg) {
+    auto statusFunc = [s = ws.shared_from_this()](std::string_view msg) {
       SendWsText(*s, {{"type", "status"}, {"message", msg}});
     };
 
@@ -283,15 +287,15 @@ void ProcessWsText(wpi::WebSocket& ws, wpi::StringRef msg) {
       try {
         ws.GetData<WebSocketData>()->romiLogEnabled = j.at("value").get<bool>();
       } catch (const wpi::json::exception& e) {
-        wpi::errs() << "could not read romiLogEnabled value: " << e.what()
-                    << '\n';
+        fmt::print(stderr, "could not read romiLogEnabled value: {}\n",
+                   e.what());
         return;
       }
     } else if (subType == "SaveExternalIOConfig") {
       try {
         RomiStatus::GetInstance()->SaveConfig(j.at("romiConfig"), true, statusFunc);
       } catch (const wpi::json::exception& e) {
-        wpi::errs() << "could not read romiConfig value: " << e.what() << "\n";
+        fmt::print(stderr, "could not read romiConfig value: {}\n", e.what());
         return;
       }
     } else if (subType == "SaveGyroCalibration") {
@@ -299,11 +303,11 @@ void ProcessWsText(wpi::WebSocket& ws, wpi::StringRef msg) {
         RomiStatus::GetInstance()->SaveConfig(j.at("romiConfig"), false, statusFunc);
       }
       catch (const wpi::json::exception& e) {
-        wpi::errs() << "could not read romiConfig value: " << e.what() << "\n";
+        fmt::print(stderr, "could not read romiConfig value: {}\n", e.what());
         return;
       }
     } else if (subType == "ServiceStartUpload") {
-      auto statusFunc = [s = ws.shared_from_this()](wpi::StringRef msg) {
+      auto statusFunc = [s = ws.shared_from_this()](std::string_view msg) {
         SendWsText(*s, {{"type", "status"}, {"message", msg}});
       };
       auto d = ws.GetData<WebSocketData>();
@@ -313,8 +317,8 @@ void ProcessWsText(wpi::WebSocket& ws, wpi::StringRef msg) {
       auto d = ws.GetData<WebSocketData>();
 
       if (fchown(d->upload.GetFD(), APP_UID, APP_GID) == -1) {
-        wpi::errs() << "could not change file ownership: "
-                    << std::strerror(errno) << "\n";
+        fmt::print(stderr, "could not change file ownership: {}\n",
+                   std::strerror(errno));
       }
       d->upload.Close();
 
@@ -322,23 +326,19 @@ void ProcessWsText(wpi::WebSocket& ws, wpi::StringRef msg) {
       try {
         filename = j.at("fileName").get<std::string>();
       } catch (const wpi::json::exception& e) {
-        wpi::errs() << "could not read fileName value: " << e.what() << "\n";
+        fmt::print(stderr, "could not read fileName value: {}\n", e.what());
         unlink(d->upload.GetFilename());
         return;
       }
 
-      wpi::SmallString<64> pathname;
-      pathname = EXEC_HOME;
-      pathname += '/';
-      pathname += filename;
+      auto pathname = fmt::format("{}/{}", EXEC_HOME, filename);
       if (unlink(pathname.c_str()) == -1) {
-        wpi::errs() << "could not remove file: " << std::strerror(errno)
-                    << "\n";
+        fmt::print(stderr, "could not remove file: {}\n", std::strerror(errno));
       }
 
       // Rename temporary file to new file
       if (rename(d->upload.GetFilename(), pathname.c_str()) == -1) {
-        wpi::errs() << "could not rename: " << std::strerror(errno) << "\n";
+        fmt::print(stderr, "could not rename: {}\n", std::strerror(errno));
       }
 
       auto installSuccess = [sf = statusFunc](wpi::WebSocket& s) {
@@ -351,7 +351,7 @@ void ProcessWsText(wpi::WebSocket& ws, wpi::StringRef msg) {
       auto installFailure = [sf = statusFunc](wpi::WebSocket& s) {
         auto d = s.GetData<WebSocketData>();
         unlink(d->upload.GetFilename());
-        wpi::errs() << "could not install service\n";
+        fmt::print(stderr, "could not install service\n");
         SendWsText(s, {{"type", "romiServiceUploadComplete"}});
         RomiStatus::GetInstance()->Up(sf);
       };
@@ -366,7 +366,7 @@ void ProcessWsText(wpi::WebSocket& ws, wpi::StringRef msg) {
 
     }
   } else if (t == "networkSave") {
-    auto statusFunc = [s = ws.shared_from_this()](wpi::StringRef msg) {
+    auto statusFunc = [s = ws.shared_from_this()](std::string_view msg) {
       SendWsText(*s, {{"type", "status"}, {"message", msg}});
     };
     try {
@@ -379,8 +379,8 @@ void ProcessWsText(wpi::WebSocket& ws, wpi::StringRef msg) {
       else if (approach == "dhcp-fallback")
         mode = NetworkSettings::kDhcpStatic;
       else {
-        wpi::errs() << "could not understand networkApproach value: "
-                    << approach << '\n';
+        fmt::print(stderr, "could not understand networkApproach value: {}\n",
+                   approach);
         return;
       }
 
@@ -394,8 +394,9 @@ void ProcessWsText(wpi::WebSocket& ws, wpi::StringRef msg) {
       else if (wifiApproach == "dhcp-fallback")
         wifiMode = NetworkSettings::kDhcpStatic;
       else {
-        wpi::errs() << "could not understand wifiNetworkApproach value: "
-                    << wifiApproach << '\n';
+        fmt::print(stderr,
+                   "could not understand wifiNetworkApproach value: {}\n",
+                   wifiApproach);
         return;
       }
 
@@ -406,8 +407,8 @@ void ProcessWsText(wpi::WebSocket& ws, wpi::StringRef msg) {
       else if (wifiAPModeStr == "access-point")
         wifiAPMode = NetworkSettings::kAccessPoint;
       else {
-        wpi::errs() << "could not understand wifiMode value: "
-                    << wifiAPModeStr << '\n';
+        fmt::print(stderr, "could not understand wifiMode value: {}\n",
+                   wifiAPModeStr);
         return;
       }
 
@@ -424,13 +425,13 @@ void ProcessWsText(wpi::WebSocket& ws, wpi::StringRef msg) {
           j.at("wifiNetworkGateway").get_ref<const std::string&>(),
           j.at("wifiNetworkDNS").get_ref<const std::string&>(), statusFunc);
     } catch (const wpi::json::exception& e) {
-      wpi::errs() << "could not read networkSave value: " << e.what() << '\n';
+      fmt::print(stderr, "could not read networkSave value: {}\n", e.what());
       return;
     }
-  } else if (t.startswith("application")) {
-    wpi::StringRef subType = t.substr(11);
+  } else if (wpi::starts_with(t, "application")) {
+    std::string_view subType = wpi::substr(t, 11);
 
-    auto statusFunc = [s = ws.shared_from_this()](wpi::StringRef msg) {
+    auto statusFunc = [s = ws.shared_from_this()](std::string_view msg) {
       SendWsText(*s, {{"type", "status"}, {"message", msg}});
     };
 
@@ -438,8 +439,8 @@ void ProcessWsText(wpi::WebSocket& ws, wpi::StringRef msg) {
     try {
       appType = j.at("applicationType").get<std::string>();
     } catch (const wpi::json::exception& e) {
-      wpi::errs() << "could not read applicationSave value: " << e.what()
-                  << '\n';
+      fmt::print(stderr, "could not read applicationSave value: {}\n",
+                 e.what());
       return;
     }
 
@@ -448,7 +449,7 @@ void ProcessWsText(wpi::WebSocket& ws, wpi::StringRef msg) {
     } else if (subType == "StartUpload") {
       auto d = ws.GetData<WebSocketData>();
       d->upload.Open(EXEC_HOME "/appUploadXXXXXX",
-                     wpi::StringRef(appType).endswith("python"), statusFunc);
+                     wpi::ends_with(appType, "python"), statusFunc);
     } else if (subType == "FinishUpload") {
       auto d = ws.GetData<WebSocketData>();
       if (d->upload)
@@ -456,10 +457,10 @@ void ProcessWsText(wpi::WebSocket& ws, wpi::StringRef msg) {
                                                  statusFunc);
       SendWsText(ws, {{"type", "applicationSaveComplete"}});
     }
-  } else if (t.startswith("file")) {
-    wpi::StringRef subType = t.substr(4);
+  } else if (wpi::starts_with(t, "file")) {
+    std::string_view subType = wpi::substr(t, 4);
     if (subType == "StartUpload") {
-      auto statusFunc = [s = ws.shared_from_this()](wpi::StringRef msg) {
+      auto statusFunc = [s = ws.shared_from_this()](std::string_view msg) {
         SendWsText(*s, {{"type", "status"}, {"message", msg}});
       };
       auto d = ws.GetData<WebSocketData>();
@@ -469,8 +470,8 @@ void ProcessWsText(wpi::WebSocket& ws, wpi::StringRef msg) {
 
       // change ownership
       if (fchown(d->upload.GetFD(), APP_UID, APP_GID) == -1) {
-        wpi::errs() << "could not change file ownership: "
-                    << std::strerror(errno) << '\n';
+        fmt::print(stderr, "could not change file ownership: {}\n",
+                   std::strerror(errno));
       }
       d->upload.Close();
 
@@ -478,7 +479,7 @@ void ProcessWsText(wpi::WebSocket& ws, wpi::StringRef msg) {
       try {
         extract = j.at("extract").get<bool>();
       } catch (const wpi::json::exception& e) {
-        wpi::errs() << "could not read extract value: " << e.what() << '\n';
+        fmt::print(stderr, "could not read extract value: {}\n", e.what());
         unlink(d->upload.GetFilename());
         return;
       }
@@ -487,7 +488,7 @@ void ProcessWsText(wpi::WebSocket& ws, wpi::StringRef msg) {
       try {
         filename = j.at("fileName").get<std::string>();
       } catch (const wpi::json::exception& e) {
-        wpi::errs() << "could not read fileName value: " << e.what() << '\n';
+        fmt::print(stderr, "could not read fileName value: {}\n", e.what());
         unlink(d->upload.GetFilename());
         return;
       }
@@ -500,34 +501,31 @@ void ProcessWsText(wpi::WebSocket& ws, wpi::StringRef msg) {
       auto extractFailure = [](wpi::WebSocket& s) {
         auto d = s.GetData<WebSocketData>();
         unlink(d->upload.GetFilename());
-        wpi::errs() << "could not extract file\n";
+        fmt::print(stderr, "could not extract file\n");
         SendWsText(s, {{"type", "fileUploadComplete"}});
       };
 
-      if (extract && wpi::StringRef{filename}.endswith("tar.gz")) {
+      if (extract && wpi::ends_with(filename, "tar.gz")) {
         RunProcess(ws, extractSuccess, extractFailure, "/bin/tar",
                    uv::Process::Uid(APP_UID), uv::Process::Gid(APP_GID),
                    uv::Process::Cwd(EXEC_HOME), "/bin/tar", "xzf",
                    d->upload.GetFilename());
-      } else if (extract && wpi::StringRef{filename}.endswith("zip")) {
+      } else if (extract && wpi::ends_with(filename, "zip")) {
         d->upload.Close();
         RunProcess(ws, extractSuccess, extractFailure, "/usr/bin/unzip",
                    uv::Process::Uid(APP_UID), uv::Process::Gid(APP_GID),
                    uv::Process::Cwd(EXEC_HOME), "/usr/bin/unzip",
                    d->upload.GetFilename());
       } else {
-        wpi::SmallString<64> pathname;
-        pathname = EXEC_HOME;
-        pathname += '/';
-        pathname += filename;
+        auto pathname = fmt::format("{}/{}", EXEC_HOME, filename);
         if (unlink(pathname.c_str()) == -1) {
-          wpi::errs() << "could not remove file: " << std::strerror(errno)
-                      << '\n';
+          fmt::print(stderr, "could not remove file: {}\n",
+                     std::strerror(errno));
         }
 
         // rename temporary file to new file
         if (rename(d->upload.GetFilename(), pathname.c_str()) == -1) {
-          wpi::errs() << "could not rename: " << std::strerror(errno) << '\n';
+          fmt::print(stderr, "could not rename: {}\n", std::strerror(errno));
         }
 
         SendWsText(ws, {{"type", "fileUploadComplete"}});
@@ -536,7 +534,7 @@ void ProcessWsText(wpi::WebSocket& ws, wpi::StringRef msg) {
   }
 }
 
-void ProcessWsBinary(wpi::WebSocket& ws, wpi::ArrayRef<uint8_t> msg) {
+void ProcessWsBinary(wpi::WebSocket& ws, std::span<const uint8_t> msg) {
   auto d = ws.GetData<WebSocketData>();
   if (d->upload) d->upload.Write(msg);
 }

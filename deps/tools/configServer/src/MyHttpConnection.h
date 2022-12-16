@@ -6,11 +6,11 @@
 #define RPICONFIGSERVER_MYHTTPCONNECTION_H_
 
 #include <memory>
+#include <string_view>
 
-#include <wpi/HttpServerConnection.h>
-#include <wpi/Twine.h>
-#include <wpi/WebSocketServer.h>
-#include <wpi/uv/Stream.h>
+#include <wpinet/HttpServerConnection.h>
+#include <wpinet/WebSocketServer.h>
+#include <wpinet/uv/Stream.h>
 
 class MyHttpConnection : public wpi::HttpServerConnection,
                          public std::enable_shared_from_this<MyHttpConnection> {
@@ -19,10 +19,10 @@ class MyHttpConnection : public wpi::HttpServerConnection,
 
  protected:
   void ProcessRequest() override;
-  void SendFileResponse(int code, const wpi::Twine& codeText,
-                        const wpi::Twine& contentType,
-                        const wpi::Twine& filename,
-                        const wpi::Twine& extraHeader = wpi::Twine{});
+  void SendFileResponse(int code, const std::string_view codeText,
+                        std::string_view contentType,
+                        std::string_view filename,
+                        std::string_view extraHeader = {});
 
   wpi::WebSocketServerHelper m_websocketHelper;
 };
