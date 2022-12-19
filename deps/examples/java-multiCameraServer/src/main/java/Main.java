@@ -6,6 +6,7 @@ import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Paths;
 import java.util.ArrayList;
+import java.util.EnumSet;
 import java.util.List;
 
 import com.google.gson.Gson;
@@ -19,7 +20,7 @@ import edu.wpi.cscore.MjpegServer;
 import edu.wpi.cscore.UsbCamera;
 import edu.wpi.cscore.VideoSource;
 import edu.wpi.first.cameraserver.CameraServer;
-import edu.wpi.first.networktables.EntryListenerFlags;
+import edu.wpi.first.networktables.NetworkTableEvent;
 import edu.wpi.first.networktables.NetworkTableInstance;
 import edu.wpi.first.vision.VisionPipeline;
 import edu.wpi.first.vision.VisionThread;
@@ -253,25 +254,33 @@ public final class Main {
     System.out.println("Starting switched camera '" + config.name + "' on " + config.key);
     MjpegServer server = CameraServer.getInstance().addSwitchedCamera(config.name);
 
-    NetworkTableInstance.getDefault()
-        .getEntry(config.key)
-        .addListener(event -> {
-              if (event.value.isDouble()) {
-                int i = (int) event.value.getDouble();
-                if (i >= 0 && i < cameras.size()) {
+    NetworkTableInstance inst = NetworkTableInstance.getDefault();
+    inst.addListener(
+        inst.getTopic(config.key),
+        EnumSet.of(NetworkTableEvent.Kind.kImmediate, NetworkTableEvent.Kind.kValueAll),
+        event -> {
+          if (event.valueData != null) {
+            if (event.valueData.value.isInteger()) {
+              int i = (int) event.valueData.value.getInteger();
+              if (i >= 0 && i < cameras.size()) {
+                server.setSource(cameras.get(i));
+              }
+            } else if (event.valueData.value.isDouble()) {
+              int i = (int) event.valueData.value.getDouble();
+              if (i >= 0 && i < cameras.size()) {
+                server.setSource(cameras.get(i));
+              }
+            } else if (event.valueData.value.isString()) {
+              String str = event.valueData.value.getString();
+              for (int i = 0; i < cameraConfigs.size(); i++) {
+                if (str.equals(cameraConfigs.get(i).name)) {
                   server.setSource(cameras.get(i));
-                }
-              } else if (event.value.isString()) {
-                String str = event.value.getString();
-                for (int i = 0; i < cameraConfigs.size(); i++) {
-                  if (str.equals(cameraConfigs.get(i).name)) {
-                    server.setSource(cameras.get(i));
-                    break;
-                  }
+                  break;
                 }
               }
-            },
-            EntryListenerFlags.kImmediate | EntryListenerFlags.kNew | EntryListenerFlags.kUpdate);
+            }
+          }
+        });
 
     return server;
   }
@@ -308,7 +317,8 @@ public final class Main {
       ntinst.startServer();
     } else {
       System.out.println("Setting up NetworkTables client for team " + team);
-      ntinst.startClientTeam(team);
+      ntinst.startClient4();
+      ntinst.setServerTeam(team);
       ntinst.startDSClient();
     }
 
