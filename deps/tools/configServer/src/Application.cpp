@@ -70,13 +70,13 @@ void Application::Set(std::string_view appType,
       onFail("could not write " EXEC_HOME "/runCamera");
       return;
     }
-    fmt::print(os, "#!/bin/sh\n");
-    fmt::print(os, "{} {}\n", TYPE_TAG, appType);
-    fmt::print(os, "echo \"Waiting 5 seconds...\"\n");
-    fmt::print(os, "sleep 5\n");
-    if (!appDir.empty()) fmt::print(os, "cd {}\n", appDir);
-    if (!appEnv.empty()) fmt::print(os, "{}\n", appEnv);
-    fmt::print(os, "exec {}\n", appCommand);
+    wpi::print(os, "#!/bin/sh\n");
+    wpi::print(os, "{} {}\n", TYPE_TAG, appType);
+    wpi::print(os, "echo \"Waiting 5 seconds...\"\n");
+    wpi::print(os, "sleep 5\n");
+    if (!appDir.empty()) wpi::print(os, "cd {}\n", appDir);
+    if (!appEnv.empty()) wpi::print(os, "{}\n", appEnv);
+    wpi::print(os, "exec {}\n", appCommand);
   }
 
   // terminate vision process so it reloads

@@ -151,18 +151,17 @@ bool ReadSwitchedCameraConfig(const wpi::json& config) {
 
 bool ReadConfig() {
   // open config file
-  std::error_code ec;
-  std::unique_ptr<wpi::MemoryBuffer> fileBuffer =
-      wpi::MemoryBuffer::GetFile(configFile, ec);
-  if (fileBuffer == nullptr || ec) {
-    fmt::print(stderr, "could not open '{}': {}", configFile, ec.message());
+  auto fileBuffer = wpi::MemoryBuffer::GetFile(configFile);
+  if (!fileBuffer) {
+    fmt::print(stderr, "could not open '{}': {}", configFile,
+               fileBuffer.error().message());
     return false;
   }
 
   // parse file
   wpi::json j;
   try {
-    j = wpi::json::parse(fileBuffer->GetCharBuffer());
+    j = wpi::json::parse((*fileBuffer)->GetCharBuffer());
   } catch (const wpi::json::parse_error& e) {
     ParseError("byte {}: {}", e.byte, e.what());
     return false;

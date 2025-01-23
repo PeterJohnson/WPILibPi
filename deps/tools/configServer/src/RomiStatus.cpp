@@ -57,14 +57,14 @@ void RomiStatus::RunSvc(const char* cmd,
     if (fd == -1) {
       wpi::raw_svector_ostream os(r->err);
       if (errno == ENXIO)
-        fmt::print(os, "unable to control service: supervise not running");
+        wpi::print(os, "unable to control service: supervise not running");
       else
-        fmt::print(os, "unable to control service: {}", std::strerror(errno));
+        wpi::print(os, "unable to control service: {}", std::strerror(errno));
     } else {
       fcntl(fd, F_SETFL, fcntl(fd, F_GETFL, 0) & ~O_NONBLOCK);
       if (write(fd, r->cmd, std::strlen(r->cmd)) == -1) {
         wpi::raw_svector_ostream os(r->err);
-        fmt::print(os, "error writing command: {}", std::strerror(errno));
+        wpi::print(os, "error writing command: {}", std::strerror(errno));
       }
       close(fd);
     }
@@ -111,9 +111,9 @@ void RomiStatus::UpdateStatus() {
     int fd = open(SERVICE "/supervise/ok", O_WRONLY | O_NDELAY);
     if (fd == -1) {
       if (errno == ENXIO)
-        fmt::print(os, "supervise not running");
+        wpi::print(os, "supervise not running");
       else
-        fmt::print(os, "unable to open supervise/ok: {}", std::strerror(errno));
+        wpi::print(os, "unable to open supervise/ok: {}", std::strerror(errno));
       return;
     }
     close(fd);
@@ -121,7 +121,7 @@ void RomiStatus::UpdateStatus() {
     // read the status data
     fd = open(SERVICE "/supervise/status", O_RDONLY | O_NDELAY);
     if (fd == -1) {
-      fmt::print(os, "unable to open supervise/status: {}",
+      wpi::print(os, "unable to open supervise/status: {}",
                  std::strerror(errno));
       return;
     }
@@ -129,11 +129,11 @@ void RomiStatus::UpdateStatus() {
     int nr = read(fd, status, sizeof status);
     close(fd);
     if (nr < static_cast<int>(sizeof status)) {
-      fmt::print(os, "unable to read supervise/status: ");
+      wpi::print(os, "unable to read supervise/status: ");
       if (nr == -1)
-        fmt::print(os, "{}", std::strerror(errno));
+        wpi::print(os, "{}", std::strerror(errno));
       else
-        fmt::print(os, "bad format");
+        wpi::print(os, "bad format");
       return;
     }
 
@@ -163,13 +163,13 @@ void RomiStatus::UpdateStatus() {
 
     // convert to status string
     if (pid)
-      fmt::print(os, "up (pid {}) ", pid);
+      wpi::print(os, "up (pid {}) ", pid);
     else
-      fmt::print(os, "down ");
-    fmt::print(os, "{} seconds", when);
-    if (pid && paused) fmt::print(os, ", paused");
-    if (!pid && want == 'u') fmt::print(os, ", want up");
-    if (pid && want == 'd') fmt::print(os, ", want down");
+      wpi::print(os, "down ");
+    wpi::print(os, "{} seconds", when);
+    if (pid && paused) wpi::print(os, ", paused");
+    if (!pid && want == 'u') wpi::print(os, ", want up");
+    if (pid && want == 'd') wpi::print(os, ", want down");
 
     if (pid) r->enabled = true;
   });
@@ -237,11 +237,9 @@ void RomiStatus::UpdateConfig(std::function<void(std::string_view)> onFail) {
 wpi::json RomiStatus::ReadRomiConfigFile(
     std::function<void(std::string_view)> onFail) {
   // Read config file
-  std::error_code ec;
-  std::unique_ptr<wpi::MemoryBuffer> fileBuffer =
-      wpi::MemoryBuffer::GetFile(ROMI_JSON, ec);
+  auto fileBuffer = wpi::MemoryBuffer::GetFile(ROMI_JSON);
 
-  if (fileBuffer == nullptr || ec) {
+  if (!fileBuffer) {
     onFail("Could not read romi config file");
     fmt::print(stderr, "could not read {}\n", ROMI_JSON);
     return wpi::json();
@@ -249,7 +247,7 @@ wpi::json RomiStatus::ReadRomiConfigFile(
 
   wpi::json j;
   try {
-    j = wpi::json::parse(fileBuffer->GetCharBuffer());
+    j = wpi::json::parse((*fileBuffer)->GetCharBuffer());
   } catch(const wpi::json::parse_error& e) {
     onFail("Parse error in config file");
     fmt::print(stderr, "Parse error in {}: byte {}: {}\n", ROMI_JSON, e.byte,

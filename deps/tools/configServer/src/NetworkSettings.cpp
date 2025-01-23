@@ -120,25 +120,25 @@ static std::string BuildDhcpcdSetting(
   // write generated config
   switch (mode) {
     case NetworkSettings::kDhcp:
-      fmt::print(os, "\n");  // nothing required
+      wpi::print(os, "\n");  // nothing required
       break;
     case NetworkSettings::kStatic:
-      fmt::print(os, "interface {}\n", iface);
-      fmt::print(os, "static ip_address={}/{}\n", addressOut.str(), cidr);
+      wpi::print(os, "interface {}\n", iface);
+      wpi::print(os, "static ip_address={}/{}\n", addressOut.str(), cidr);
       if (!gatewayOut.empty())
-        fmt::print(os, "static routers={}\n", gatewayOut.str());
+        wpi::print(os, "static routers={}\n", gatewayOut.str());
       if (!dnsOut.empty())
-        fmt::print(os, "static domain_name_servers={}\n", dnsOut.str());
+        wpi::print(os, "static domain_name_servers={}\n", dnsOut.str());
       break;
     case NetworkSettings::kDhcpStatic:
-      fmt::print(os, "profile static_{}\n", iface);
-      fmt::print(os, "static ip_address={}/{}\n", addressOut.str(), cidr);
+      wpi::print(os, "profile static_{}\n", iface);
+      wpi::print(os, "static ip_address={}/{}\n", addressOut.str(), cidr);
       if (!gatewayOut.empty())
-        fmt::print(os, "static routers={}\n", gatewayOut.str());
+        wpi::print(os, "static routers={}\n", gatewayOut.str());
       if (!dnsOut.empty())
-        fmt::print(os, "static domain_name_servers={}\n", dnsOut.str());
-      fmt::print(os, "interface {}\n", iface);
-      fmt::print(os, "fallback static_{}\n", iface);
+        wpi::print(os, "static domain_name_servers={}\n", dnsOut.str());
+      wpi::print(os, "interface {}\n", iface);
+      wpi::print(os, "fallback static_{}\n", iface);
       break;
   }
   return os.str();
@@ -210,16 +210,16 @@ void NetworkSettings::Set(Mode mode, std::string_view address,
         onFail("could not write " DHCPCD_CONF);
         return;
       }
-      for (auto&& line : lines) fmt::print(os, "{}\n", line);
+      for (auto&& line : lines) wpi::print(os, "{}\n", line);
 
       // write marker
-      fmt::print(os, "{}\n", GEN_MARKER);
+      wpi::print(os, "{}\n", GEN_MARKER);
 
       // write generated config
-      fmt::print(os, "{}\n", eth0);
-      fmt::print(os, "{}", wlan0);
+      wpi::print(os, "{}\n", eth0);
+      wpi::print(os, "{}", wlan0);
       if (wifiAPMode == kAccessPoint) {
-        fmt::print(os, "nohook wpa_supplicant\n");
+        wpi::print(os, "nohook wpa_supplicant\n");
       }
     }
   }
@@ -244,8 +244,8 @@ void NetworkSettings::Set(Mode mode, std::string_view address,
       onFail("could not write " DNSMASQ_CONF);
       return;
     }
-    fmt::print(os, "interface=wlan0\n");
-    fmt::print(os, "dhcp-range={}.100,{}.200,{},5m\n", addr3part, addr3part,
+    wpi::print(os, "interface=wlan0\n");
+    wpi::print(os, "dhcp-range={}.100,{}.200,{},5m\n", addr3part, addr3part,
                wifiMask);
   } else {
     // remove dnsmasq config file
@@ -262,20 +262,20 @@ void NetworkSettings::Set(Mode mode, std::string_view address,
       onFail("could not write " HOSTAPD_CONF);
       return;
     }
-    fmt::print(os, "interface=wlan0\n");
-    fmt::print(os, "hw_mode=g\n");
-    fmt::print(os, "channel={}\n", wifiChannel);
-    fmt::print(os, "wmm_enabled=0\n");
-    fmt::print(os, "macaddr_acl=0\n");
-    fmt::print(os, "auth_algs=1\n");
-    fmt::print(os, "ignore_broadcast_ssid=0\n");
-    fmt::print(os, "ssid={}\n", wifiSsid);
+    wpi::print(os, "interface=wlan0\n");
+    wpi::print(os, "hw_mode=g\n");
+    wpi::print(os, "channel={}\n", wifiChannel);
+    wpi::print(os, "wmm_enabled=0\n");
+    wpi::print(os, "macaddr_acl=0\n");
+    wpi::print(os, "auth_algs=1\n");
+    wpi::print(os, "ignore_broadcast_ssid=0\n");
+    wpi::print(os, "ssid={}\n", wifiSsid);
     if (!wifiWpa2.empty()) {
-      fmt::print(os, "wpa=2\n");
-      fmt::print(os, "wpa_key_mgmt=WPA-PSK\n");
-      fmt::print(os, "wpa_pairwise=TKIP\n");
-      fmt::print(os, "rsn_pairwise=CCMP\n");
-      fmt::print(os, "wpa_passphrase={}\n", wifiWpa2);
+      wpi::print(os, "wpa=2\n");
+      wpi::print(os, "wpa_key_mgmt=WPA-PSK\n");
+      wpi::print(os, "wpa_pairwise=TKIP\n");
+      wpi::print(os, "rsn_pairwise=CCMP\n");
+      wpi::print(os, "wpa_passphrase={}\n", wifiWpa2);
     }
   } else {
     // remove hostapd config file
@@ -312,20 +312,20 @@ void NetworkSettings::Set(Mode mode, std::string_view address,
         onFail("could not write " WPA_SUPPLICANT_CONF);
         return;
       }
-      for (auto&& line : lines) fmt::print(os, "{}\n", line);
+      for (auto&& line : lines) wpi::print(os, "{}\n", line);
 
       // write marker
-      fmt::print(os, "{}\n", GEN_MARKER);
+      wpi::print(os, "{}\n", GEN_MARKER);
 
       // write generated config
-      fmt::print(os, "network={\n");
-      fmt::print(os, "    ssid=\"{}\"\n", wifiSsid);
+      wpi::print(os, "network={\n");
+      wpi::print(os, "    ssid=\"{}\"\n", wifiSsid);
       if (!wifiWpa2.empty()) {
-        fmt::print(os, "    psk=\"{}\"\n", wifiWpa2);
+        wpi::print(os, "    psk=\"{}\"\n", wifiWpa2);
       } else {
-        fmt::print(os, "    key_mgmt=NONE\n");
+        wpi::print(os, "    key_mgmt=NONE\n");
       }
-      fmt::print(os, "}\n");
+      wpi::print(os, "}\n");
     }
   }
 

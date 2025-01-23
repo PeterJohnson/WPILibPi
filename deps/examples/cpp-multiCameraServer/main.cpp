@@ -12,9 +12,9 @@
 #include <networktables/NetworkTableInstance.h>
 #include <vision/VisionPipeline.h>
 #include <vision/VisionRunner.h>
+#include <wpi/MemoryBuffer.h>
 #include <wpi/StringExtras.h>
 #include <wpi/json.h>
-#include <wpi/raw_istream.h>
 
 #include "cameraserver/CameraServer.h"
 
@@ -149,17 +149,17 @@ bool ReadSwitchedCameraConfig(const wpi::json& config) {
 
 bool ReadConfig() {
   // open config file
-  std::error_code ec;
-  wpi::raw_fd_istream is(configFile, ec);
-  if (ec) {
-    fmt::print(stderr, "could not open '{}': {}", configFile, ec.message());
+  auto fileBuffer = wpi::MemoryBuffer::GetFile(configFile);
+  if (!fileBuffer) {
+    fmt::print(stderr, "could not open '{}': {}", configFile,
+               fileBuffer.error().message());
     return false;
   }
 
   // parse file
   wpi::json j;
   try {
-    j = wpi::json::parse(is);
+    j = wpi::json::parse((*fileBuffer)->GetCharBuffer());
   } catch (const wpi::json::parse_error& e) {
     ParseError("byte {}: {}", e.byte, e.what());
     return false;

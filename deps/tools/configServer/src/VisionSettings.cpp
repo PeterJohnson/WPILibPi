@@ -41,18 +41,16 @@ void VisionSettings::Set(const wpi::json& data,
 void VisionSettings::UpdateStatus() { status(GetStatusJson()); }
 
 wpi::json VisionSettings::GetStatusJson() {
-  std::error_code ec;
-  std::unique_ptr<wpi::MemoryBuffer> fileBuffer =
-      wpi::MemoryBuffer::GetFile(FRC_JSON, ec);
+  auto fileBuffer = wpi::MemoryBuffer::GetFile(FRC_JSON);
 
-  if (fileBuffer == nullptr || ec) {
+  if (!fileBuffer) {
     fmt::print(stderr, "could not read {}\n", FRC_JSON);
     return wpi::json();
   }
 
   try {
     wpi::json j = {{"type", "visionSettings"},
-                   {"settings", wpi::json::parse(fileBuffer->GetCharBuffer())}};
+                   {"settings", wpi::json::parse((*fileBuffer)->GetCharBuffer())}};
     return j;
   } catch (wpi::json::exception& e) {
     fmt::print(stderr, "could not parse {}\n", FRC_JSON);

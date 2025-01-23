@@ -6,6 +6,7 @@ IMG_VERSION?=$(shell git describe)
 	-I${ALLWPILIB}/wpiutil/src/main/native/include \
 	-I${ALLWPILIB}/wpinet/src/main/native/include \
 	-I${ALLWPILIB}/cscore/src/main/native/include \
+	-I${ALLWPILIB}/wpiutil/src/main/native/thirdparty/expected/include \
 	-I${ALLWPILIB}/wpiutil/src/main/native/thirdparty/llvm/include \
 	-I${ALLWPILIB}/wpiutil/src/main/native/thirdparty/sigslot/include \
 	-I${ALLWPILIB}/wpiutil/src/main/native/thirdparty/fmtlib/include \

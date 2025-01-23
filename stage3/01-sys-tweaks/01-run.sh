@@ -42,13 +42,13 @@ pushd ${DOWNLOAD_DIR}
 
 # opencv sources
 wget -nc -nv \
-    https://github.com/opencv/opencv/archive/4.8.0.tar.gz
-wget -nc -nv -O contrib-4.8.0.tar.gz \
-    https://github.com/opencv/opencv_contrib/archive/4.8.0.tar.gz
+    https://github.com/opencv/opencv/archive/4.10.0.tar.gz
+wget -nc -nv -O contrib-4.10.0.tar.gz \
+    https://github.com/opencv/opencv_contrib/archive/4.10.0.tar.gz
 
 # allwpilib
 wget -nc -nv -O allwpilib.tar.gz \
-    https://github.com/wpilibsuite/allwpilib/archive/v2024.3.1.tar.gz
+    https://github.com/wpilibsuite/allwpilib/archive/v2025.2.1.tar.gz
 
 ## robotpy-build
 #wget -nc -nv -O robotpy-build.tar.gz \
@@ -88,10 +88,10 @@ install -v -d ${EXTRACT_DIR}
 pushd ${EXTRACT_DIR}
 
 # opencv
-rm -rf opencv-4.8.0
-tar xzf "${DOWNLOAD_DIR}/4.8.0.tar.gz"
-tar xzf "${DOWNLOAD_DIR}/contrib-4.8.0.tar.gz"
-pushd opencv-4.8.0
+rm -rf opencv-4.10.0
+tar xzf "${DOWNLOAD_DIR}/4.10.0.tar.gz"
+tar xzf "${DOWNLOAD_DIR}/contrib-4.10.0.tar.gz"
+pushd opencv-4.10.0
 sed -i -e 's/javac sourcepath/javac target="1.8" source="1.8" sourcepath/' modules/java/jar/build.xml.in
 # disable extraneous data warnings; these are common with USB cameras
 sed -i -e '/JWRN_EXTRANEOUS_DATA/d' 3rdparty/libjpeg/jdmarker.c
@@ -135,7 +135,7 @@ build_opencv () {
     rm -rf $1
     mkdir -p $1
     pushd $1
-    cmake "${EXTRACT_DIR}/opencv-4.8.0" \
+    cmake "${EXTRACT_DIR}/opencv-4.10.0" \
 	-G Ninja \
 	-DWITH_FFMPEG=OFF \
         -DBUILD_JPEG=ON \
@@ -147,7 +147,7 @@ build_opencv () {
         -DBUILD_SHARED_LIBS=$3 \
         -DCMAKE_BUILD_TYPE=$2 \
         -DCMAKE_DEBUG_POSTFIX=d \
-        -DCMAKE_TOOLCHAIN_FILE=${ROOTFS_DIR}/usr/src/opencv-4.8.0/platforms/linux/aarch64-gnu.toolchain.cmake \
+        -DCMAKE_TOOLCHAIN_FILE=${ROOTFS_DIR}/usr/src/opencv-4.10.0/platforms/linux/aarch64-gnu.toolchain.cmake \
         -DARM_LINUX_SYSROOT=${ROOTFS_DIR} \
         -DCMAKE_SYSROOT=${ROOTFS_DIR} \
         -DENABLE_NEON=ON \
@@ -159,7 +159,7 @@ build_opencv () {
 	-DOPENCV_GENERATE_PKGCONFIG=ON \
         -DCMAKE_MODULE_PATH=${SUB_STAGE_DIR}/files \
         -DCMAKE_INSTALL_PREFIX=/usr/local/frc$4 \
-	-DOPENCV_EXTRA_MODULES_PATH=${EXTRACT_DIR}/opencv_contrib-4.8.0/modules/aruco \
+	-DOPENCV_EXTRA_MODULES_PATH=${EXTRACT_DIR}/opencv_contrib-4.10.0/modules/aruco \
         || exit 1
     ninja || exit 1
     env DESTDIR=${ROOTFS_DIR} ninja install || exit 1
@@ -200,12 +200,12 @@ build_wpilib () {
         -DWITH_SIMULATION_MODULES=OFF \
 	-DWPILIB_TARGET_WARNINGS=-Wno-maybe-uninitialized \
         -DCMAKE_BUILD_TYPE=$2 \
-        -DCMAKE_TOOLCHAIN_FILE=${ROOTFS_DIR}/usr/src/opencv-4.8.0/platforms/linux/aarch64-gnu.toolchain.cmake \
+        -DCMAKE_TOOLCHAIN_FILE=${ROOTFS_DIR}/usr/src/opencv-4.10.0/platforms/linux/aarch64-gnu.toolchain.cmake \
         -DARM_LINUX_SYSROOT=${ROOTFS_DIR} \
         -DCMAKE_SYSROOT=${ROOTFS_DIR} \
         -DCMAKE_MODULE_PATH=${SUB_STAGE_DIR}/files \
-        -DOPENCV_JAR_FILE=`ls ${ROOTFS_DIR}/usr/local/frc/java/opencv-480.jar` \
-        -DOPENCV_JNI_FILE=`ls ${ROOTFS_DIR}/usr/local/frc/lib/libopencv_java480.so` \
+        -DOPENCV_JAR_FILE=`ls ${ROOTFS_DIR}/usr/local/frc/java/opencv-4100.jar` \
+        -DOPENCV_JNI_FILE=`ls ${ROOTFS_DIR}/usr/local/frc/lib/libopencv_java4100.so` \
         -DOpenCV_DIR=${ROOTFS_DIR}/usr/local/frc/share/opencv4 \
         -DTHREADS_PTHREAD_ARG=-pthread \
         -DCMAKE_INSTALL_PREFIX=/usr/local/frc \
@@ -230,7 +230,7 @@ build_static_wpilib() {
         -DWITH_SIMULATION_MODULES=OFF \
 	-DWPILIB_TARGET_WARNINGS=-Wno-maybe-uninitialized \
         -DCMAKE_BUILD_TYPE=Release \
-        -DCMAKE_TOOLCHAIN_FILE=${ROOTFS_DIR}/usr/src/opencv-4.8.0/platforms/linux/aarch64-gnu.toolchain.cmake \
+        -DCMAKE_TOOLCHAIN_FILE=${ROOTFS_DIR}/usr/src/opencv-4.10.0/platforms/linux/aarch64-gnu.toolchain.cmake \
         -DARM_LINUX_SYSROOT=${ROOTFS_DIR} \
         -DCMAKE_MODULE_PATH=${SUB_STAGE_DIR}/files \
         -DOpenCV_DIR=${ROOTFS_DIR}/usr/local/frc/share/OpenCV \
@@ -269,8 +269,8 @@ sed -i -e 's, -L/pi-gen[^ ]*,,g' "${ROOTFS_DIR}/usr/local/frc-static/lib/pkgconf
 
 popd
 
-ROBOTPY_REPO=https://frcmaven.wpi.edu/api/download/wpilib-python-release-2024
-ROBOTPY_VERSION=2024.3.1.0
+ROBOTPY_REPO=https://frcmaven.wpi.edu/api/download/wpilib-python-release-2025
+ROBOTPY_VERSION=2025.2.1
 ROBOTPY_ARCH=aarch64
 
 on_chroot << EOF
